@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>생활반 인원보고</title>
+
+<style>
+body {
+    font-family: Arial;
+    background: #f5f6fa;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 480px;
+    padding: 15px;
+}
+
+.card {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+h2 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.label {
+    font-size: 13px;
+    color: #666;
+    margin-left: 2px;
+}
+
+.input {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    margin-top: 10px;
+    border-radius: 8px;
+    border: none;
+    background: #2f80ed;
+    color: white;
+    font-weight: bold;
+}
+
+button.delete {
+    background: #eb5757;
+}
+
+button.secondary {
+    background: #6c757d;
+}
+
+.center {
+    text-align: center;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th, td {
+    padding: 8px;
+    text-align: center;
+}
+
+textarea {
+    width: 100%;
+    height: 220px;
+    margin-top: 10px;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+/* 토스트 */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: black;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    opacity: 0;
+    transition: 0.3s;
+}
+.toast.show {
+    opacity: 1;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<!-- 생활반 설정 -->
+<div class="card">
+
+<h2>생활반 설정</h2>
+
+<div class="input-group">
+<div class="label">생활반 번호</div>
+<input class="input" type="number" id="unitNumber" placeholder="예: 10">
+</div>
+
+<button onclick="saveUnit()">저장</button>
+<button class="secondary" onclick="resetAll()">전체 초기화</button>
+
+<div class="center" style="margin-top:15px;">
+<div>주말 점검</div>
+<input type="checkbox" id="weekendCheck" onchange="toggleWeekend()">
+</div>
+
+</div>
+
+<!-- 인원 추가 -->
+<div class="card">
+
+<h2>인원 추가</h2>
+
+<div class="input-group">
+<div class="label">이름</div>
+<input class="input" type="text" id="name" placeholder="예: 홍길동">
+</div>
+
+<div class="input-group">
+<div class="label">계급</div>
+<select class="input" id="rank">
+<option value="병장">병장</option>
+<option value="상병">상병</option>
+<option value="일병">일병</option>
+<option value="이병">이병</option>
+</select>
+</div>
+
+<button onclick="addPerson()">추가</button>
+
+</div>
+
+<!-- 상태 -->
+<div class="card">
+
+<h2>상태 설정</h2>
+
+<table id="statusTable">
+<thead>
+<tr>
+<th>이름</th>
+<th>계급</th>
+<th>점호</th>
+<th>조별</th>
+<th id="weekendHeader" style="display:none;">주말</th>
+<th>삭제</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+</div>
+
+<!-- 결과 -->
+<div class="card">
+
+<textarea id="output" placeholder="자동 생성 / 클릭 시 복사" onclick="copyReport()"></textarea>
+
+</div>
+
+</div>
+
+<div id="toast" class="toast">복사 + 카톡 실행</div>
+
+<script>
+
+let people = JSON.parse(localStorage.getItem("people")) || [];
+let statuses = JSON.parse(localStorage.getItem("statuses")) || {};
+let unitNumber = localStorage.getItem("unitNumber") || "";
+let weekendEnabled = JSON.parse(localStorage.getItem("weekendEnabled")) || false;
+
+const rankOrder = { 병장:4, 상병:3, 일병:2, 이병:1 };
+
+// 저장
+function saveUnit(){
+    unitNumber = document.getElementById("unitNumber").value;
+    localStorage.setItem("unitNumber", unitNumber);
+    generateReport();
+}
+
+// 초기화
+function resetAll(){
+    localStorage.clear();
+    people=[]; statuses={}; weekendEnabled=false;
+    document.getElementById("output").value="";
+    renderTable();
+}
+
+// 주말 토글
+function toggleWeekend(){
+    weekendEnabled = document.getElementById("weekendCheck").checked;
+    localStorage.setItem("weekendEnabled", weekendEnabled);
+    renderTable();
+    generateReport();
+}
+
+// 인원 추가
+function addPerson(){
+    const name=document.getElementById("name").value;
+    const rank=document.getElementById("rank").value;
+    if(!name) return alert("이름 입력");
+
+    people.push({name,rank});
+    localStorage.setItem("people",JSON.stringify(people));
+    renderTable();
+    generateReport();
+}
+
+// 삭제
+function deletePerson(idx){
+    people.splice(idx,1);
+
+    ["점호","조별","주말점검"].forEach(t=>{
+        if(statuses[t]){
+            let n={};
+            Object.entries(statuses[t]).forEach(([i,v])=>{
+                if(i!=idx){
+                    let ni=i>idx?i-1:i;
+                    n[ni]=v;
+                }
+            });
+            statuses[t]=n;
+        }
+    });
+
+    localStorage.setItem("people",JSON.stringify(people));
+    localStorage.setItem("statuses",JSON.stringify(statuses));
+    renderTable();
+    generateReport();
+}
+
+// 셀렉트
+function createSelect(idx,type){
+    const cats=["","조리","당직","작업","휴가","환자","파견","기타"];
+    let html=`<select onchange="updateStatus(${idx},'${type}',this.value)">`;
+    cats.forEach(c=>{
+        let sel=(statuses[type]&&statuses[type][idx]===c)?"selected":"";
+        html+=`<option value="${c}" ${sel}>${c||"정상"}</option>`;
+    });
+    html+="</select>";
+    return html;
+}
+
+// 상태 업데이트 + 자동 갱신
+function updateStatus(idx,type,val){
+    if(!statuses[type]) statuses[type]={};
+    statuses[type][idx]=val;
+    localStorage.setItem("statuses",JSON.stringify(statuses));
+    generateReport();
+}
+
+// 테이블
+function renderTable(){
+
+    const tbody=document.querySelector("#statusTable tbody");
+    const header=document.getElementById("weekendHeader");
+
+    header.style.display = weekendEnabled?"":"none";
+    document.getElementById("weekendCheck").checked = weekendEnabled;
+
+    tbody.innerHTML="";
+
+    people.forEach((p,idx)=>{
+
+        let weekendCell = weekendEnabled ? `<td>${createSelect(idx,"주말점검")}</td>` : "";
+
+        let row=document.createElement("tr");
+
+        row.innerHTML=`
+        <td>${p.name}</td>
+        <td>${p.rank}</td>
+        <td>${createSelect(idx,"점호")}</td>
+        <td>${createSelect(idx,"조별")}</td>
+        ${weekendCell}
+        <td><button class="delete" onclick="deletePerson(${idx})">삭제</button></td>
+        `;
+
+        tbody.appendChild(row);
+    });
+}
+
+// 보고서 생성
+function section(type){
+    let total=people.length,abs=0,map={};
+
+    if(statuses[type]){
+        Object.entries(statuses[type]).forEach(([i,c])=>{
+            if(c){
+                abs++;
+                if(!map[c]) map[c]=[];
+                map[c].push(people[i]);
+            }
+        });
+    }
+
+    let txt=`\n📍${type} 인원보고\n`;
+    txt+=`총원 ${total} / 부재 ${abs} / 현재원 ${total-abs}\n`;
+
+    Object.entries(map).forEach(([c,l])=>{
+        txt+=`-${c}(${l.length}): `;
+
+        let cr="";
+        l.sort((a,b)=>rankOrder[b.rank]-rankOrder[a.rank])
+         .forEach((p,i)=>{
+            if(p.rank!==cr){
+                if(i!==0) txt+=", ";
+                txt+=`${p.rank} ${p.name}`;
+                cr=p.rank;
+            }else txt+=`, ${p.name}`;
+        });
+
+        txt+="\n";
+    });
+
+    return txt;
+}
+
+// 전체 보고
+function generateReport(){
+
+    let r=`[제${unitNumber}생활반 인원보고]\n`;
+    r+=section("점호");
+    r+=section("조별");
+    if(weekendEnabled) r+=section("주말점검");
+
+    document.getElementById("output").value=r;
+
+    autoCopyAndKakao(r);
+}
+
+// 자동 복사 + 카톡
+function autoCopyAndKakao(text){
+    navigator.clipboard.writeText(text);
+
+    setTimeout(()=>{
+        location.href="kakao://";
+    },300);
+
+    showToast();
+}
+
+// 복사 클릭
+function copyReport(){
+    let t=document.getElementById("output").value;
+    navigator.clipboard.writeText(t);
+    showToast();
+}
+
+// 토스트
+function showToast(){
+    let t=document.getElementById("toast");
+    t.classList.add("show");
+    setTimeout(()=>t.classList.remove("show"),1500);
+}
+
+// init
+renderTable();
+generateReport();
+
+</script>
+
+</body>
+</html>
