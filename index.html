@@ -28,14 +28,14 @@ body {
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
+h2 { margin-top: 0; font-size: 18px; }
+
 .input-group {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin-top: 10px;
 }
-
-.label { font-size: 13px; color: #666; }
 
 .input {
     width: 100%;
@@ -58,10 +58,20 @@ button {
     font-weight: bold;
 }
 
-button.delete { background: #eb5757; }
+button.delete {
+    background: #eb5757;
+}
 
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 8px; text-align: center; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+th, td {
+    padding: 8px;
+    text-align: center;
+}
 
 textarea {
     width: 100%;
@@ -70,6 +80,8 @@ textarea {
     border-radius: 10px;
     padding: 10px;
     font-size: 14px;
+    box-sizing: border-box;
+    cursor: pointer;
 }
 
 .toast {
@@ -86,6 +98,7 @@ textarea {
 }
 .toast.show { opacity: 1; }
 </style>
+
 </head>
 
 <body>
@@ -94,6 +107,7 @@ textarea {
 
 <!-- 설정 -->
 <div class="card">
+<h1>테스트용 절대 맹신금지</h1>
 <h2>생활반 설정</h2>
 
 <div class="input-group">
@@ -101,32 +115,32 @@ textarea {
 <input class="input" type="number" id="unitNumber">
 </div>
 
+<!-- 🔥 주말 점검 -->
+<div class="input-group">
+<label class="label">주말 점검</label>
+<input type="checkbox" id="weekendCheck" onchange="toggleWeekend()">
+</div>
+
 <button onclick="saveUnit()">저장</button>
 <button onclick="resetAll()">전체 초기화</button>
-
 </div>
 
 <!-- 인원 -->
 <div class="card">
 <h2>인원 추가</h2>
 
-<div class="input-group">
-<div class="label">이름</div>
-<input class="input" type="text" id="name">
-</div>
+<input class="input" type="text" id="name" placeholder="이름">
 
-<div class="input-group">
-<div class="label">계급</div>
 <select class="input" id="rank">
 <option value="병장">병장</option>
 <option value="상병">상병</option>
 <option value="일병">일병</option>
 <option value="이병">이병</option>
 </select>
-</div>
+
+<input class="input" type="text" id="unit" placeholder="소속 (본부 / 1소대 등)">
 
 <button onclick="addPerson()">추가</button>
-
 </div>
 
 <!-- 상태 -->
@@ -140,17 +154,17 @@ textarea {
 <th>계급</th>
 <th>점호</th>
 <th>조별</th>
+<th id="weekendHead" style="display:none;">주말</th>
 <th>삭제</th>
 </tr>
 </thead>
 <tbody></tbody>
 </table>
-
 </div>
 
 <!-- 보고서 -->
 <div class="card">
-<textarea id="output" placeholder="클릭 시 복사"></textarea>
+<textarea id="output" placeholder="클릭하면 복사됩니다"></textarea>
 </div>
 
 </div>
@@ -159,115 +173,104 @@ textarea {
 
 <script>
 
-/* =========================
-   COOKIE
-========================= */
 
-function setCookie(name, value, days=7){
-    let d = new Date();
-    d.setTime(d.getTime() + days*24*60*60*1000);
+
+function setCookie(n,v,d=7){
+    let date=new Date();
+    date.setTime(date.getTime()+d*86400000);
     document.cookie =
-        name + "=" + encodeURIComponent(value) +
-        "; expires=" + d.toUTCString() +
-        "; path=/";
+        `${n}=${encodeURIComponent(v)}; expires=${date.toUTCString()}; path=/`;
 }
 
-function getCookie(name){
-    let n = name + "=";
-    let arr = document.cookie.split(";");
-
-    for(let c of arr){
-        c = c.trim();
-        if(c.indexOf(n) === 0){
-            return decodeURIComponent(c.substring(n.length));
-        }
-    }
-    return null;
+function getCookie(n){
+    let c=document.cookie.split("; ")
+        .find(r=>r.startsWith(n+"="));
+    return c ? decodeURIComponent(c.split("=")[1]) : null;
 }
 
-/* =========================
-   DATA
-========================= */
+
 
 let people = JSON.parse(getCookie("people") || "[]");
 let statuses = JSON.parse(getCookie("statuses") || "{}");
 let unitNumber = getCookie("unitNumber") || "";
+let weekendEnabled = JSON.parse(getCookie("weekend") || "false");
 
-/* 계급 우선순위 */
-const rankOrder = {
-    "병장": 4,
-    "상병": 3,
-    "일병": 2,
-    "이병": 1
-};
+const rankOrder = { "병장":4, "상병":3, "일병":2, "이병":1 };
 
-/* =========================
-   SAVE
-========================= */
+
 
 function saveAll(){
     setCookie("people", JSON.stringify(people));
     setCookie("statuses", JSON.stringify(statuses));
     setCookie("unitNumber", unitNumber);
+    setCookie("weekend", JSON.stringify(weekendEnabled));
 }
 
-/* =========================
-   UNIT
-========================= */
+
 
 function saveUnit(){
-    unitNumber = document.getElementById("unitNumber").value;
+    unitNumber=document.getElementById("unitNumber").value;
     saveAll();
     generateReport();
 }
 
-/* =========================
-   RESET
-========================= */
+
 
 function resetAll(){
-    document.cookie = "people=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    document.cookie = "statuses=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    document.cookie = "unitNumber=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie="people=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie="statuses=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie="unitNumber=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie="weekend=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
-    people = [];
-    statuses = {};
-    unitNumber = "";
+    people=[];
+    statuses={};
+    unitNumber="";
+    weekendEnabled=false;
 
     renderTable();
     generateReport();
 }
 
-/* =========================
-   PEOPLE
-========================= */
+
+
+function toggleWeekend(){
+    weekendEnabled=document.getElementById("weekendCheck").checked;
+    saveAll();
+    renderTable();
+    generateReport();
+}
+
+
 
 function addPerson(){
-    const name = document.getElementById("name").value;
-    const rank = document.getElementById("rank").value;
+    const name=document.getElementById("name").value;
+    const rank=document.getElementById("rank").value;
+    const unit=document.getElementById("unit").value || "";
 
     if(!name) return alert("이름 입력");
 
-    people.push({name, rank});
-    saveAll();
+    people.push({name,rank,unit});
 
+    saveAll();
     renderTable();
     generateReport();
 }
+
+
 
 function deletePerson(idx){
     people.splice(idx,1);
 
-    ["점호","조별"].forEach(t=>{
+    ["점호","조별","주말점검"].forEach(t=>{
         if(statuses[t]){
-            let n = {};
+            let n={};
             Object.entries(statuses[t]).forEach(([i,v])=>{
-                if(i != idx){
-                    let ni = i > idx ? i-1 : i;
-                    n[ni] = v;
+                if(i!=idx){
+                    let ni=i>idx?i-1:i;
+                    n[ni]=v;
                 }
             });
-            statuses[t] = n;
+            statuses[t]=n;
         }
     });
 
@@ -276,9 +279,7 @@ function deletePerson(idx){
     generateReport();
 }
 
-/* =========================
-   SELECT
-========================= */
+
 
 function createSelect(idx,type){
     const cats=["","조리","당직","작업","휴가","환자","파견","기타"];
@@ -286,129 +287,125 @@ function createSelect(idx,type){
     let html=`<select onchange="updateStatus(${idx},'${type}',this.value)">`;
 
     cats.forEach(c=>{
-        let sel = (statuses[type] && statuses[type][idx] === c) ? "selected" : "";
-        html += `<option value="${c}" ${sel}>${c||"정상"}</option>`;
+        let sel=(statuses[type]?.[idx]===c)?"selected":"";
+        html+=`<option value="${c}" ${sel}>${c||"정상"}</option>`;
     });
 
-    html += "</select>";
+    html+="</select>";
     return html;
 }
 
-/* =========================
-   STATUS UPDATE
-========================= */
-
 function updateStatus(idx,type,val){
-    if(!statuses[type]) statuses[type] = {};
-    statuses[type][idx] = val;
+    if(!statuses[type]) statuses[type]={};
+    statuses[type][idx]=val;
 
     saveAll();
     generateReport();
 }
 
-/* =========================
-   TABLE
-========================= */
+
 
 function renderTable(){
+    const tbody=document.querySelector("#statusTable tbody");
+    const weekendHead=document.getElementById("weekendHead");
 
-    const tbody = document.querySelector("#statusTable tbody");
-    tbody.innerHTML = "";
+    weekendHead.style.display = weekendEnabled ? "" : "none";
+    document.getElementById("weekendCheck").checked = weekendEnabled;
+
+    tbody.innerHTML="";
 
     people.forEach((p,idx)=>{
 
-        let row = document.createElement("tr");
+        let weekendCell = weekendEnabled
+            ? `<td>${createSelect(idx,"주말점검")}</td>`
+            : "";
 
-        row.innerHTML = `
+        tbody.innerHTML+=`
+        <tr>
         <td>${p.name}</td>
         <td>${p.rank}</td>
         <td>${createSelect(idx,"점호")}</td>
         <td>${createSelect(idx,"조별")}</td>
+        ${weekendCell}
         <td><button class="delete" onclick="deletePerson(${idx})">삭제</button></td>
-        `;
-
-        tbody.appendChild(row);
+        </tr>`;
     });
 }
 
-/* =========================
-   REPORT (핵심 수정 복구)
-========================= */
+
 
 function section(type){
 
-    let total = people.length;
-    let absent = 0;
-    let map = {};
+    let total=people.length;
+    let abs=0;
+    let map={};
 
     if(statuses[type]){
         Object.entries(statuses[type]).forEach(([i,c])=>{
-            if(c){
-                absent++;
-                if(!map[c]) map[c] = [];
-                map[c].push(people[i]);
-            }
+            if(!c) return;
+
+            abs++;
+            if(!map[c]) map[c]=[];
+            map[c].push(people[i]);
         });
     }
 
-    let txt = `\n📍${type} 인원보고\n`;
-    txt += `총원 ${total} / 부재 ${absent} / 현재원 ${total-absent}\n`;
+    let txt=`\n📍${type} 인원보고\n`;
+    txt+=`총원 ${total} / 부재 ${abs} / 현재원 ${total-abs}\n`;
 
     Object.entries(map).forEach(([cat,list])=>{
 
-        // 계급 정렬
         list.sort((a,b)=>rankOrder[b.rank]-rankOrder[a.rank]);
 
-        txt += `-${cat}(${list.length}): `;
+        txt+=`-${cat}(${list.length}): `;
 
-        let currentRank = "";
+        let currentRank="";
 
         list.forEach((p,i)=>{
-            if(p.rank !== currentRank){
-                if(i !== 0) txt += ", ";
-                txt += `${p.rank} ${p.name}`;
-                currentRank = p.rank;
+
+            let showUnit = (cat==="당직"||cat==="작업") ? `(${p.unit})` : "";
+
+            if(p.rank!==currentRank){
+                if(i!==0) txt+=", ";
+                txt+=`${p.rank} ${p.name}${showUnit}`;
+                currentRank=p.rank;
             } else {
-                txt += `, ${p.name}`;
+                txt+=`, ${p.name}${showUnit}`;
             }
         });
 
-        txt += "\n";
+        txt+="\n";
     });
 
     return txt;
 }
 
-/* =========================
-   REPORT GENERATE
-========================= */
+
 
 function generateReport(){
-    let r = `[제${unitNumber}생활반 인원보고]\n`;
-    r += section("점호");
-    r += section("조별");
+    let r=`[제${unitNumber}생활반 인원보고]\n`;
+    r+=section("점호");
+    r+=section("조별");
 
-    document.getElementById("output").value = r;
+    if(weekendEnabled){
+        r+=section("주말점검");
+    }
+
+    document.getElementById("output").value=r;
 }
 
-/* =========================
-   COPY ONLY ON CLICK
-========================= */
 
 document.getElementById("output").addEventListener("click",()=>{
-    let text = document.getElementById("output").value;
-    if(!text) return;
-
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(
+        document.getElementById("output").value
+    );
     showToast();
 });
 
-/* =========================
-   TOAST
-========================= */
+
 
 function showToast(){
-    let t = document.getElementById("toast");
+    let t=document.getElementById("toast");
     t.classList.add("show");
     setTimeout(()=>t.classList.remove("show"),1500);
 }
